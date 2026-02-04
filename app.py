@@ -20,15 +20,69 @@ HTML_TEMPLATE = """
 <head>
     <title>Paper Recommender</title>
     <style>
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #fff;
+            --bg-tertiary: #fafafa;
+            --bg-hover: #f0f0f0;
+            --bg-input: #fff;
+            --bg-stats: #e9ecef;
+            --bg-abstract: #f8f9fa;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --text-muted: #888;
+            --text-abstract: #555;
+            --border-color: #ddd;
+            --border-input: #ccc;
+            --tab-bg: #ddd;
+            --btn-bg: #fff;
+            --flash-bg: #d4edda;
+        }
+        .dark {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #1f2940;
+            --bg-hover: #253554;
+            --bg-input: #1f2940;
+            --bg-stats: #1f2940;
+            --bg-abstract: #253554;
+            --text-primary: #e8e8e8;
+            --text-secondary: #b0b0b0;
+            --text-muted: #888;
+            --text-abstract: #c0c0c0;
+            --border-color: #3a4a6b;
+            --border-input: #3a4a6b;
+            --tab-bg: #253554;
+            --btn-bg: #1f2940;
+            --flash-bg: #1e4a3a;
+        }
         * { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background: #f5f5f5;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background 0.3s, color 0.3s;
         }
-        h1 { color: #333; }
+        h1 { color: var(--text-primary); }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .theme-toggle {
+            padding: 8px 16px;
+            border: 1px solid var(--border-color);
+            background: var(--btn-bg);
+            color: var(--text-primary);
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .theme-toggle:hover { opacity: 0.8; }
         .tabs {
             display: flex;
             gap: 10px;
@@ -36,16 +90,17 @@ HTML_TEMPLATE = """
         }
         .tab {
             padding: 10px 20px;
-            background: #ddd;
+            background: var(--tab-bg);
+            color: var(--text-primary);
             border: none;
             cursor: pointer;
             border-radius: 5px 5px 0 0;
             font-size: 16px;
         }
-        .tab.active { background: #fff; font-weight: bold; }
+        .tab.active { background: var(--bg-secondary); font-weight: bold; }
         .panel {
             display: none;
-            background: #fff;
+            background: var(--bg-secondary);
             padding: 20px;
             border-radius: 0 5px 5px 5px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
@@ -60,8 +115,10 @@ HTML_TEMPLATE = """
             flex: 1;
             padding: 10px;
             font-size: 16px;
-            border: 1px solid #ccc;
+            border: 1px solid var(--border-input);
             border-radius: 5px;
+            background: var(--bg-input);
+            color: var(--text-primary);
         }
         .search-box button {
             padding: 10px 20px;
@@ -73,34 +130,34 @@ HTML_TEMPLATE = """
             cursor: pointer;
         }
         .paper {
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             padding: 15px;
             margin-bottom: 10px;
             border-radius: 5px;
-            background: #fafafa;
+            background: var(--bg-tertiary);
         }
-        .paper:hover { background: #f0f0f0; }
+        .paper:hover { background: var(--bg-hover); }
         .paper-title {
             font-weight: bold;
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 5px;
         }
         .paper-meta {
-            color: #666;
+            color: var(--text-secondary);
             font-size: 14px;
             margin-bottom: 10px;
         }
         .paper-authors {
-            color: #888;
+            color: var(--text-muted);
             font-size: 13px;
             margin-bottom: 10px;
         }
         .paper-abstract {
             font-size: 13px;
-            color: #555;
+            color: var(--text-abstract);
             margin-bottom: 10px;
             padding: 8px 10px;
-            background: #f8f9fa;
+            background: var(--bg-abstract);
             border-left: 3px solid #007bff;
             line-height: 1.5;
             max-height: 100px;
@@ -110,15 +167,17 @@ HTML_TEMPLATE = """
             display: flex;
             gap: 5px;
             align-items: center;
+            flex-wrap: wrap;
         }
         .rating-buttons button {
             padding: 5px 12px;
-            border: 1px solid #ccc;
-            background: #fff;
+            border: 1px solid var(--border-input);
+            background: var(--btn-bg);
+            color: var(--text-primary);
             cursor: pointer;
             border-radius: 3px;
         }
-        .rating-buttons button:hover { background: #e0e0e0; }
+        .rating-buttons button:hover { background: var(--bg-hover); }
         .rating-buttons button.selected { background: #007bff; color: white; border-color: #007bff; }
         .rating-buttons button.irrelevant { color: #dc3545; }
         .rating-buttons button.irrelevant.selected { background: #dc3545; color: white; border-color: #dc3545; }
@@ -131,8 +190,8 @@ HTML_TEMPLATE = """
             animation: rated-flash 0.5s ease;
         }
         @keyframes rated-flash {
-            0% { background: #d4edda; }
-            100% { background: #fafafa; }
+            0% { background: var(--flash-bg); }
+            100% { background: var(--bg-tertiary); }
         }
         .paper.rated-irrelevant {
             opacity: 0.5;
@@ -141,7 +200,7 @@ HTML_TEMPLATE = """
         .clear-btn {
             padding: 3px 8px;
             border: 1px solid #999;
-            background: #fff;
+            background: var(--btn-bg);
             color: #999;
             cursor: pointer;
             border-radius: 3px;
@@ -152,13 +211,13 @@ HTML_TEMPLATE = """
         .readlist-btn {
             padding: 5px 12px;
             border: 1px solid #17a2b8;
-            background: #fff;
+            background: var(--btn-bg);
             color: #17a2b8;
             cursor: pointer;
             border-radius: 3px;
             margin-left: 10px;
         }
-        .readlist-btn:hover { background: #e7f5f7; }
+        .readlist-btn:hover { background: var(--bg-hover); }
         .readlist-btn.in-readlist {
             background: #17a2b8;
             color: white;
@@ -173,13 +232,14 @@ HTML_TEMPLATE = """
             margin-right: 10px;
         }
         .stats {
-            background: #e9ecef;
+            background: var(--bg-stats);
             padding: 10px 15px;
             border-radius: 5px;
             margin-bottom: 20px;
+            color: var(--text-secondary);
         }
         .no-results {
-            color: #666;
+            color: var(--text-secondary);
             font-style: italic;
             padding: 20px;
             text-align: center;
@@ -189,7 +249,10 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>Paper Recommender</h1>
+    <div class="header">
+        <h1>Paper Recommender</h1>
+        <button class="theme-toggle" onclick="toggleTheme()">🌙 Dark Mode</button>
+    </div>
 
     <div class="stats" id="stats">
         Loading stats...
@@ -501,7 +564,30 @@ HTML_TEMPLATE = """
             });
         }
 
+        // Theme toggle
+        function toggleTheme() {
+            document.body.classList.toggle('dark');
+            const isDark = document.body.classList.contains('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateThemeButton();
+        }
+
+        function updateThemeButton() {
+            const btn = document.querySelector('.theme-toggle');
+            const isDark = document.body.classList.contains('dark');
+            btn.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        }
+
+        function loadTheme() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.body.classList.add('dark');
+            }
+            updateThemeButton();
+        }
+
         // Initial load
+        loadTheme();
         updateStats();
     </script>
 </body>
