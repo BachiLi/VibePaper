@@ -326,6 +326,15 @@ HTML_TEMPLATE = """
         let ratings = {};
         let readlist = new Set();
         let totalPapers = 0;
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
 
         function showTab(name) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -343,54 +352,58 @@ HTML_TEMPLATE = """
                 .then(r => r.json())
                 .then(data => {
                     totalPapers = data.total_papers;
-                    document.getElementById('stats').innerHTML =
-                        `<strong>${data.total_papers}</strong> papers |
-                         <strong>${data.total_ratings}</strong> rated
-                         (${data.positive_ratings} liked, ${data.negative_ratings} irrelevant) |
-                         <strong>${data.readlist_count}</strong> in read list`;
-                    ratings = data.ratings;
-                    readlist = new Set(data.readlist);
+                    // Merge server ratings into local state rather than
+                    // replacing wholesale.  If the user clicked a rating
+                    // between when the fetch was sent and when it resolved,
+                    // a wholesale replacement would silently discard that
+                    // click and cause the next renderPaper() call (e.g. on
+                    // tab switch) to show stale state.
+                    Object.assign(ratings, data.ratings);
+                    data.readlist.forEach(k => readlist.add(k));
+                    updateStatsLocal();
                 });
         }
 
         function renderPaper(paper, score = null) {
-            const currentRating = ratings[paper.dblp_key] || 0;
-            const safeKey = paper.dblp_key.replace(/[^a-zA-Z0-9]/g, '_');
+            const key = paper.dblp_key;
+            const escapedKey = escapeHtml(key);
+            const currentRating = ratings[key] || 0;
+            const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
             const ratingButtons = [-1, 1, 2, 3, 4, 5].map(r => {
                 const selected = currentRating === r ? 'selected' : '';
                 const irrelevant = r === -1 ? 'irrelevant' : '';
                 const label = r === -1 ? 'Irrelevant' : r;
-                return `<button data-rating="${r}" class="${selected} ${irrelevant}" onclick="rate('${paper.dblp_key}', ${r})">${label}</button>`;
+                return `<button data-rating="${r}" class="${selected} ${irrelevant}" onclick="rate('${escapedKey}', ${r})">${label}</button>`;
             }).join('');
 
             const scoreHtml = score !== null ? `<span class="rec-score">${score.toFixed(3)}</span>` : '';
-            const doiLink = paper.doi ? `<a href="https://doi.org/${paper.doi}" target="_blank">DOI</a>` : '';
-            const authors = (paper.authors || []).slice(0, 3).join(', ') + (paper.authors && paper.authors.length > 3 ? ' et al.' : '');
+            const doiLink = paper.doi ? `<a href="https://doi.org/${escapeHtml(paper.doi)}" target="_blank">DOI</a>` : '';
+            const authors = (paper.authors || []).slice(0, 3).map(a => escapeHtml(a)).join(', ') + (paper.authors && paper.authors.length > 3 ? ' et al.' : '');
             const ratedIrrelevant = currentRating === -1 ? 'rated-irrelevant' : '';
 
-            const inReadlist = readlist.has(paper.dblp_key);
+            const inReadlist = readlist.has(key);
             const readlistBtnClass = inReadlist ? 'readlist-btn in-readlist' : 'readlist-btn';
             const readlistBtnText = inReadlist ? '✓ In Read List' : '+ Read Later';
-            const clearBtn = currentRating ? `<button class="clear-btn" onclick="clearRating('${paper.dblp_key}')" title="Clear rating">×</button>` : '';
+            const clearBtn = currentRating ? `<button class="clear-btn" onclick="clearRating('${escapedKey}')" title="Clear rating">×</button>` : '';
 
             const abstractHtml = paper.abstract
-                ? `<div class="paper-abstract"><strong>Abstract:</strong> ${paper.abstract}</div>`
+                ? `<div class="paper-abstract"><strong>Abstract:</strong> ${escapeHtml(paper.abstract)}</div>`
                 : '';
 
             return `
-                <div class="paper ${ratedIrrelevant}" id="paper-${safeKey}" data-key="${paper.dblp_key}">
-                    <div class="paper-title">${scoreHtml}${paper.title || 'Untitled'}</div>
+                <div class="paper ${ratedIrrelevant}" id="paper-${safeKey}" data-key="${escapedKey}">
+                    <div class="paper-title">${scoreHtml}${escapeHtml(paper.title) || 'Untitled'}</div>
                     <div class="paper-authors">${authors}</div>
                     <div class="paper-meta">
-                        ${paper.year} | ${paper.venue || 'TOG'} | ${doiLink}
-                        <br><small style="color:#999">${paper.dblp_key}</small>
+                        ${escapeHtml(paper.year)} | ${escapeHtml(paper.venue) || 'TOG'} | ${doiLink}
+                        <br><small style="color:#999">${escapedKey}</small>
                     </div>
                     ${abstractHtml}
-                    <div class="rating-buttons" data-key="${paper.dblp_key}">
+                    <div class="rating-buttons" data-key="${escapedKey}">
                         Rate: ${ratingButtons}
                         <span class="score">${currentRating ? `Current: ${currentRating}` : ''}</span>
                         ${clearBtn}
-                        <button class="${readlistBtnClass}" onclick="toggleReadlist('${paper.dblp_key}')">${readlistBtnText}</button>
+                        <button class="${readlistBtnClass}" onclick="toggleReadlist('${escapedKey}')">${readlistBtnText}</button>
                     </div>
                 </div>
             `;
@@ -411,50 +424,55 @@ HTML_TEMPLATE = """
                 });
         }
 
-        function rate(key, score) {
-            // Immediate UI update (optimistic)
-            ratings[key] = score;
-            const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
-            const paperEl = document.getElementById('paper-' + safeKey);
+        function updatePaperCard(key) {
+            // Surgically update every on-screen card for this paper.
+            // Avoids replacing the whole card (which would destroy &
+            // recreate DOM nodes, losing hover state and causing a
+            // visible flicker that masks the actual change).
+            const currentRating = ratings[key] || 0;
+            const inReadlist = readlist.has(key);
 
-            if (paperEl) {
-                // Update button states
-                const buttons = paperEl.querySelectorAll('.rating-buttons button');
-                buttons.forEach(btn => {
-                    btn.classList.remove('selected');
-                    if (parseInt(btn.dataset.rating) === score) {
-                        btn.classList.add('selected');
-                    }
+            document.querySelectorAll('[data-key="' + escapeHtml(key) + '"]').forEach(paperEl => {
+                // --- rating buttons ---
+                paperEl.querySelectorAll('button[data-rating]').forEach(btn => {
+                    btn.classList.toggle('selected', parseInt(btn.dataset.rating) === currentRating);
                 });
 
-                // Update "Current" display
+                // --- "Current: N" label ---
                 const scoreSpan = paperEl.querySelector('.rating-buttons .score');
                 if (scoreSpan) {
-                    scoreSpan.textContent = score ? `Current: ${score}` : '';
+                    scoreSpan.textContent = currentRating ? 'Current: ' + currentRating : '';
                 }
 
-                // Add clear button if it doesn't exist
+                // --- clear button: add if rated, remove if not ---
                 let clearBtn = paperEl.querySelector('.clear-btn');
-                if (!clearBtn && score) {
+                if (currentRating && !clearBtn) {
                     clearBtn = document.createElement('button');
                     clearBtn.className = 'clear-btn';
-                    clearBtn.textContent = '×';
+                    clearBtn.textContent = '\u00d7';
                     clearBtn.title = 'Clear rating';
-                    clearBtn.onclick = () => clearRating(key);
+                    clearBtn.setAttribute('onclick', "clearRating('" + escapeHtml(key) + "')");
                     scoreSpan.insertAdjacentElement('afterend', clearBtn);
+                } else if (!currentRating && clearBtn) {
+                    clearBtn.remove();
                 }
 
-                // Visual feedback
-                paperEl.classList.remove('just-rated', 'rated-irrelevant');
-                void paperEl.offsetWidth; // Trigger reflow for animation restart
-                paperEl.classList.add('just-rated');
-                if (score === -1) {
-                    paperEl.classList.add('rated-irrelevant');
+                // --- readlist button ---
+                const rlBtn = paperEl.querySelector('.readlist-btn');
+                if (rlBtn) {
+                    rlBtn.classList.toggle('in-readlist', inReadlist);
+                    rlBtn.textContent = inReadlist ? '\u2713 In Read List' : '+ Read Later';
                 }
-            }
 
-            // Update stats immediately
-            updateStatsLocal(score);
+                // --- card-level classes ---
+                paperEl.classList.toggle('rated-irrelevant', currentRating === -1);
+            });
+        }
+
+        function rate(key, score) {
+            ratings[key] = score;
+            updatePaperCard(key);
+            updateStatsLocal();
 
             // Send to server (fire and forget)
             fetch('/api/rate', {
@@ -465,36 +483,9 @@ HTML_TEMPLATE = """
         }
 
         function clearRating(key) {
-            // Remove from local ratings
             delete ratings[key];
-
-            const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
-            const paperEl = document.getElementById('paper-' + safeKey);
-
-            if (paperEl) {
-                // Remove selected state from all rating buttons
-                const buttons = paperEl.querySelectorAll('.rating-buttons button[data-rating]');
-                buttons.forEach(btn => btn.classList.remove('selected'));
-
-                // Clear the "Current:" display
-                const scoreSpan = paperEl.querySelector('.rating-buttons .score');
-                if (scoreSpan) scoreSpan.textContent = '';
-
-                // Remove the clear button
-                const clearBtn = paperEl.querySelector('.clear-btn');
-                if (clearBtn) clearBtn.remove();
-
-                // Remove irrelevant styling
-                paperEl.classList.remove('rated-irrelevant');
-
-                // Visual feedback
-                paperEl.classList.remove('just-rated');
-                void paperEl.offsetWidth;
-                paperEl.classList.add('just-rated');
-            }
-
-            // Update stats
-            updateStatsLocal(0);
+            updatePaperCard(key);
+            updateStatsLocal();
 
             // Send to server (score=0 removes the rating)
             fetch('/api/rate', {
@@ -504,7 +495,7 @@ HTML_TEMPLATE = """
             });
         }
 
-        function updateStatsLocal(newScore) {
+        function updateStatsLocal() {
             // Quick local stats update without server round-trip
             const statsEl = document.getElementById('stats');
             const positive = Object.values(ratings).filter(v => v > 0).length;
@@ -559,38 +550,18 @@ HTML_TEMPLATE = """
             const inList = readlist.has(key);
             const action = inList ? 'remove' : 'add';
 
-            // Optimistic UI update
+            // Optimistic local update
             if (inList) {
                 readlist.delete(key);
             } else {
                 readlist.add(key);
             }
 
-            // Update button immediately
-            const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
-            const paperEl = document.getElementById('paper-' + safeKey);
-            if (paperEl) {
-                const btn = paperEl.querySelector('.readlist-btn');
-                if (btn) {
-                    if (inList) {
-                        btn.classList.remove('in-readlist');
-                        btn.textContent = '+ Read Later';
-                    } else {
-                        btn.classList.add('in-readlist');
-                        btn.textContent = '✓ In Read List';
-                    }
-                }
-                // Flash animation
-                paperEl.classList.remove('just-rated');
-                void paperEl.offsetWidth;
-                paperEl.classList.add('just-rated');
-            }
+            // Update all cards for this paper in place
+            updatePaperCard(key);
 
             // Update stats
-            const statsEl = document.getElementById('stats');
-            const currentText = statsEl.innerHTML;
-            const newCount = readlist.size;
-            statsEl.innerHTML = currentText.replace(/\d+ in read list/, `${newCount} in read list`);
+            updateStatsLocal();
 
             // Send to server
             fetch('/api/readlist/' + action, {

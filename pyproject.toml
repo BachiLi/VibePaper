@@ -8,7 +8,8 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "flask>=3.1.2",
     "lxml>=6.0.2",
-    "numpy>=2.4.2",
+    "numpy<2.0.0",
     "requests>=2.32.5",
+    "torch>=2.6.0",
     "sentence-transformers>=5.2.2",
 ]
