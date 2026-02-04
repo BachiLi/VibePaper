@@ -1,16 +1,9 @@
 # VibePaper
 
 A recommendation system for SIGGRAPH/TOG papers using SPECTER2 embeddings.
+As the name suggests, this project is 100% vibe-coded by Claude Code.
 
 Rate papers you like (or mark as irrelevant), and get personalized recommendations for similar papers.
-
-## Features
-
-- **7,175 papers** from TOG, SIGGRAPH conference track (2022+), and older SIGGRAPH (1985-2001)
-- **97.8% abstract coverage** from Semantic Scholar and OpenAlex
-- **SPECTER2 embeddings** for scientific paper similarity
-- Web interface for searching, rating, and discovering papers
-- Reading list with relevance-based sorting
 
 ## Setup
 
