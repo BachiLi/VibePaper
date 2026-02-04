@@ -246,6 +246,24 @@ HTML_TEMPLATE = """
         }
         a { color: #007bff; text-decoration: none; }
         a:hover { text-decoration: underline; }
+        .sort-control {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sort-control label {
+            color: var(--text-secondary);
+        }
+        .sort-control select {
+            padding: 8px 12px;
+            border: 1px solid var(--border-input);
+            border-radius: 5px;
+            background: var(--bg-input);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -281,10 +299,26 @@ HTML_TEMPLATE = """
     </div>
 
     <div id="rated" class="panel">
+        <div class="sort-control">
+            <label>Sort by:</label>
+            <select id="ratedSort" onchange="loadRated()">
+                <option value="rating">Rating (highest first)</option>
+                <option value="year">Year (newest first)</option>
+                <option value="year-asc">Year (oldest first)</option>
+            </select>
+        </div>
         <div id="ratedPapers"></div>
     </div>
 
     <div id="readlist" class="panel">
+        <div class="sort-control">
+            <label>Sort by:</label>
+            <select id="readlistSort" onchange="loadReadlist()">
+                <option value="relevance">Relevance (highest first)</option>
+                <option value="year">Year (newest first)</option>
+                <option value="year-asc">Year (oldest first)</option>
+            </select>
+        </div>
         <div id="readlistPapers"></div>
     </div>
 
@@ -496,7 +530,8 @@ HTML_TEMPLATE = """
         }
 
         function loadRated() {
-            fetch('/api/rated')
+            const sort = document.getElementById('ratedSort').value;
+            fetch(`/api/rated?sort=${sort}`)
                 .then(r => r.json())
                 .then(data => {
                     if (data.papers.length === 0) {
@@ -508,7 +543,8 @@ HTML_TEMPLATE = """
         }
 
         function loadReadlist() {
-            fetch('/api/readlist')
+            const sort = document.getElementById('readlistSort').value;
+            fetch(`/api/readlist?sort=${sort}`)
                 .then(r => r.json())
                 .then(data => {
                     if (data.papers.length === 0) {
@@ -642,17 +678,26 @@ def recommendations():
 
 @app.route('/api/rated')
 def rated():
+    sort = request.args.get('sort', 'rating')
     papers = []
     for key in rec.ratings:
         paper = rec.get_paper_by_key(key)
         if paper:
             papers.append(paper)
-    # Sort by rating (highest first)
-    papers.sort(key=lambda p: rec.ratings.get(p['dblp_key'], 0), reverse=True)
+
+    # Sort based on parameter
+    if sort == 'year':
+        papers.sort(key=lambda p: p.get('year', 0), reverse=True)
+    elif sort == 'year-asc':
+        papers.sort(key=lambda p: p.get('year', 0))
+    else:  # rating (default)
+        papers.sort(key=lambda p: rec.ratings.get(p['dblp_key'], 0), reverse=True)
+
     return jsonify({'papers': papers})
 
 @app.route('/api/readlist')
 def get_readlist():
+    sort = request.args.get('sort', 'relevance')
     papers = []
     keys = list(rec.readlist)
 
@@ -667,8 +712,14 @@ def get_readlist():
                 'score': scores.get(key, 0)
             })
 
-    # Sort by relevance score (highest first)
-    papers.sort(key=lambda p: p['score'], reverse=True)
+    # Sort based on parameter
+    if sort == 'year':
+        papers.sort(key=lambda p: p['paper'].get('year', 0), reverse=True)
+    elif sort == 'year-asc':
+        papers.sort(key=lambda p: p['paper'].get('year', 0))
+    else:  # relevance (default)
+        papers.sort(key=lambda p: p['score'], reverse=True)
+
     return jsonify({'papers': papers})
 
 @app.route('/api/readlist/add', methods=['POST'])
