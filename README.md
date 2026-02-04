@@ -5,6 +5,8 @@ As the name suggests, this project is 100% vibe-coded by Claude Code.
 
 Rate papers you like (or mark as irrelevant), and get personalized recommendations for similar papers.
 
+<img width="1214" height="849" alt="Screenshot 2026-02-03 215823" src="https://github.com/user-attachments/assets/a8abb3de-bedb-4d26-9bf4-961c7fcac50d" />
+
 ## Setup
 
 ### Prerequisites
