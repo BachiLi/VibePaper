@@ -285,7 +285,7 @@ HTML_TEMPLATE = """
 
     <div id="search" class="panel active">
         <div class="search-box">
-            <input type="text" id="searchQuery" placeholder="Search papers by title..." onkeypress="if(event.key==='Enter')search()">
+            <input type="text" id="searchQuery" placeholder="Search by title or author..." onkeypress="if(event.key==='Enter')search()">
             <button onclick="search()">Search</button>
         </div>
         <div id="searchResults"></div>

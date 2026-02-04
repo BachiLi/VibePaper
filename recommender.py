@@ -238,14 +238,16 @@ class PaperRecommender:
         return scores
 
     def find_paper(self, query: str) -> list[dict]:
-        """Search for papers by title."""
+        """Search for papers by title or author."""
         query_lower = query.lower()
         matches = []
         for p in self.papers:
             title = p.get("title") or ""
-            if query_lower in title.lower():
+            authors = p.get("authors") or []
+            authors_str = " ".join(authors).lower()
+            if query_lower in title.lower() or query_lower in authors_str:
                 matches.append(p)
-        return matches[:20]
+        return matches[:50]
 
     def get_paper_by_key(self, key: str) -> dict | None:
         """Get a paper by its DBLP key."""
