@@ -288,6 +288,14 @@ HTML_TEMPLATE = """
             <input type="text" id="searchQuery" placeholder="Search by title or author..." onkeypress="if(event.key==='Enter')search()">
             <button onclick="search()">Search</button>
         </div>
+        <div class="sort-control" id="searchSortControl" style="display:none">
+            <label>Sort by:</label>
+            <select id="searchSort" onchange="renderSearchResults()">
+                <option value="relevance">Relevance</option>
+                <option value="year">Year (newest first)</option>
+                <option value="year-asc">Year (oldest first)</option>
+            </select>
+        </div>
         <div id="searchResults"></div>
     </div>
 
@@ -326,6 +334,7 @@ HTML_TEMPLATE = """
         let ratings = {};
         let readlist = new Set();
         let totalPapers = 0;
+        let cachedSearchPapers = [];
         function escapeHtml(str) {
             if (str == null) return '';
             return String(str)
@@ -416,12 +425,28 @@ HTML_TEMPLATE = """
             fetch(`/api/search?q=${encodeURIComponent(query)}`)
                 .then(r => r.json())
                 .then(data => {
-                    if (data.papers.length === 0) {
-                        document.getElementById('searchResults').innerHTML = '<div class="no-results">No papers found</div>';
-                    } else {
-                        document.getElementById('searchResults').innerHTML = data.papers.map(p => renderPaper(p)).join('');
-                    }
+                    cachedSearchPapers = data.papers;
+                    document.getElementById('searchSortControl').style.display = cachedSearchPapers.length > 0 ? 'flex' : 'none';
+                    document.getElementById('searchSort').value = 'relevance';
+                    renderSearchResults();
                 });
+        }
+
+        function renderSearchResults() {
+            const sort = document.getElementById('searchSort').value;
+            const papers = [...cachedSearchPapers];
+            if (sort === 'year') {
+                papers.sort((a, b) => (b.year || 0) - (a.year || 0));
+            } else if (sort === 'year-asc') {
+                papers.sort((a, b) => (a.year || 0) - (b.year || 0));
+            }
+            // 'relevance' keeps original API order
+
+            if (papers.length === 0) {
+                document.getElementById('searchResults').innerHTML = '<div class="no-results">No papers found</div>';
+            } else {
+                document.getElementById('searchResults').innerHTML = papers.map(p => renderPaper(p)).join('');
+            }
         }
 
         function updatePaperCard(key) {
