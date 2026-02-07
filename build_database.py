@@ -355,6 +355,33 @@ def clean_abstract(text: str) -> str:
     return text.strip()
 
 
+def is_valid_abstract(text: str) -> bool:
+    """Check if abstract is real content, not page metadata."""
+    if not text or len(text) < 50:
+        return False
+
+    # Bad patterns that indicate scraped page metadata instead of abstract
+    bad_patterns = [
+        "article ",  # Starts with "article " (page navigation)
+        "Authors Info",
+        "View Profile",
+        "Share on",
+        "ACM Transactions on Graphics",
+        "ACM SIGGRAPH",
+        "Info & Claims",
+        "Citations",
+        "Downloads",
+        "Publication History",
+    ]
+
+    text_start = text[:300].lower()
+    for pattern in bad_patterns:
+        if pattern.lower() in text_start:
+            return False
+
+    return True
+
+
 def enrich_with_openalex(papers: list[dict]) -> list[dict]:
     """Enrich papers with missing abstracts from OpenAlex."""
     print("\n=== Enriching with OpenAlex abstracts ===")
@@ -376,7 +403,7 @@ def enrich_with_openalex(papers: list[dict]) -> list[dict]:
                 inv_idx = data.get("abstract_inverted_index")
                 if inv_idx:
                     abstract = clean_abstract(reconstruct_abstract(inv_idx))
-                    if abstract and len(abstract) > 50:
+                    if is_valid_abstract(abstract):
                         papers[paper_idx]["abstract"] = abstract
                         papers[paper_idx]["abstract_source"] = "openalex"
                         found += 1
