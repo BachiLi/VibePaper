@@ -14,6 +14,15 @@ rec.load_embeddings()
 rec.load_ratings()
 rec.load_readlist()
 
+# Validate embeddings match papers
+if rec.embeddings is not None and len(rec.papers) != rec.embeddings.shape[0]:
+    print(
+        f"\nERROR: Paper count ({len(rec.papers)}) does not match "
+        f"embeddings count ({rec.embeddings.shape[0]})."
+    )
+    print("Please rebuild embeddings: uv run python build.py embeddings\n")
+    raise SystemExit(1)
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
