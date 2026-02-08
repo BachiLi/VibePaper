@@ -232,6 +232,29 @@ HTML_TEMPLATE = """
             color: white;
         }
         .readlist-btn.in-readlist:hover { background: #138496; }
+        .rank-control {
+            display: inline-flex;
+            gap: 3px;
+            align-items: center;
+            margin-left: 10px;
+        }
+        .rank-control .rank-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-right: 2px;
+            font-weight: bold;
+        }
+        .rank-control button {
+            padding: 3px 10px;
+            border: 1px solid #e8a020;
+            background: var(--btn-bg);
+            color: #e8a020;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .rank-control button:hover { background: #e8a020; color: white; }
         .rec-score {
             background: #28a745;
             color: white;
@@ -331,6 +354,7 @@ HTML_TEMPLATE = """
         <div class="sort-control">
             <label>Sort by:</label>
             <select id="readlistSort" onchange="loadReadlist()">
+                <option value="rank">Rank</option>
                 <option value="relevance">Relevance (highest first)</option>
                 <option value="year">Year (newest first)</option>
                 <option value="year-asc">Year (oldest first)</option>
@@ -341,7 +365,7 @@ HTML_TEMPLATE = """
 
     <script>
         let ratings = {};
-        let readlist = new Set();
+        let readlist = new Map();
         let totalPapers = 0;
         let cachedSearchPapers = [];
         function escapeHtml(str) {
@@ -377,12 +401,12 @@ HTML_TEMPLATE = """
                     // click and cause the next renderPaper() call (e.g. on
                     // tab switch) to show stale state.
                     Object.assign(ratings, data.ratings);
-                    data.readlist.forEach(k => readlist.add(k));
+                    Object.entries(data.readlist).forEach(([k, p]) => readlist.set(k, p));
                     updateStatsLocal();
                 });
         }
 
-        function renderPaper(paper, score = null) {
+        function renderPaper(paper, score = null, showPriority = false) {
             const key = paper.dblp_key;
             const escapedKey = escapeHtml(key);
             const currentRating = ratings[key] || 0;
@@ -408,6 +432,11 @@ HTML_TEMPLATE = """
                 ? `<div class="paper-abstract"><strong>Abstract:</strong> ${escapeHtml(paper.abstract)}</div>`
                 : '';
 
+            let rankHtml = '';
+            if (showPriority && readlist.has(key)) {
+                rankHtml = `<span class="rank-control" data-rank-key="${escapedKey}"><span class="rank-label">#${readlist.get(key)}</span><button onclick="moveReadlist('${escapedKey}', 'up')" title="Move up">+</button><button onclick="moveReadlist('${escapedKey}', 'down')" title="Move down">&minus;</button></span>`;
+            }
+
             return `
                 <div class="paper ${ratedIrrelevant}" id="paper-${safeKey}" data-key="${escapedKey}">
                     <div class="paper-title">${scoreHtml}${escapeHtml(paper.title) || 'Untitled'}</div>
@@ -422,6 +451,7 @@ HTML_TEMPLATE = """
                         <span class="score">${currentRating ? `Current: ${currentRating}` : ''}</span>
                         ${clearBtn}
                         <button class="${readlistBtnClass}" onclick="toggleReadlist('${escapedKey}')">${readlistBtnText}</button>
+                        ${rankHtml}
                     </div>
                 </div>
             `;
@@ -498,6 +528,12 @@ HTML_TEMPLATE = """
                     rlBtn.textContent = inReadlist ? '\u2713 In Read List' : '+ Read Later';
                 }
 
+                // --- rank controls: remove when paper leaves readlist ---
+                const rankCtrl = paperEl.querySelector('.rank-control');
+                if (!inReadlist && rankCtrl) {
+                    rankCtrl.remove();
+                }
+
                 // --- card-level classes ---
                 paperEl.classList.toggle('rated-irrelevant', currentRating === -1);
             });
@@ -572,10 +608,12 @@ HTML_TEMPLATE = """
             fetch(`/api/readlist?sort=${sort}`)
                 .then(r => r.json())
                 .then(data => {
+                    // Update local rank map with raw rank values
+                    data.papers.forEach(p => readlist.set(p.paper.dblp_key, p.rank));
                     if (data.papers.length === 0) {
                         document.getElementById('readlistPapers').innerHTML = '<div class="no-results">No papers in read list yet. Click "+ Read Later" on any paper to add it.</div>';
                     } else {
-                        document.getElementById('readlistPapers').innerHTML = data.papers.map(p => renderPaper(p.paper, p.score)).join('');
+                        document.getElementById('readlistPapers').innerHTML = data.papers.map((p, i) => renderPaper(p.paper, p.score, true)).join('');
                     }
                 });
         }
@@ -588,7 +626,7 @@ HTML_TEMPLATE = """
             if (inList) {
                 readlist.delete(key);
             } else {
-                readlist.add(key);
+                readlist.set(key, readlist.size + 1);
             }
 
             // Update all cards for this paper in place
@@ -602,6 +640,23 @@ HTML_TEMPLATE = """
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({key: key})
+            });
+        }
+
+        function moveReadlist(key, direction) {
+            // Change raw rank by 1
+            const newRank = readlist.get(key) + (direction === 'up' ? -1 : 1);
+            readlist.set(key, newRank);
+
+            // Update only this card's rank label
+            document.querySelectorAll('[data-rank-key="' + escapeHtml(key) + '"] .rank-label')
+                .forEach(el => el.textContent = '#' + newRank);
+
+            // Send to server (fire and forget)
+            fetch('/api/readlist/move', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({key: key, direction: direction})
             });
         }
 
@@ -649,7 +704,7 @@ def stats():
         'positive_ratings': positive,
         'negative_ratings': negative,
         'ratings': rec.ratings,
-        'readlist': list(rec.readlist),
+        'readlist': rec.readlist,
         'readlist_count': len(rec.readlist)
     })
 
@@ -714,7 +769,8 @@ def get_readlist():
         if paper:
             papers.append({
                 'paper': paper,
-                'score': scores.get(key, 0)
+                'score': scores.get(key, 0),
+                'rank': rec.readlist.get(key, 0)
             })
 
     # Sort based on parameter
@@ -722,8 +778,10 @@ def get_readlist():
         papers.sort(key=lambda p: p['paper'].get('year', 0), reverse=True)
     elif sort == 'year-asc':
         papers.sort(key=lambda p: p['paper'].get('year', 0))
-    else:  # relevance (default)
+    elif sort == 'relevance':
         papers.sort(key=lambda p: p['score'], reverse=True)
+    else:  # rank (default)
+        papers.sort(key=lambda p: p['rank'])
 
     return jsonify({'papers': papers})
 
@@ -733,6 +791,17 @@ def add_to_readlist():
     key = data.get('key')
     if key:
         rec.add_to_readlist(key)
+    return jsonify({'success': True})
+
+@app.route('/api/readlist/move', methods=['POST'])
+def move_in_readlist():
+    data = request.json
+    key = data.get('key')
+    direction = data.get('direction')
+    if key and direction == 'up':
+        rec.move_readlist_up(key)
+    elif key and direction == 'down':
+        rec.move_readlist_down(key)
     return jsonify({'success': True})
 
 @app.route('/api/readlist/remove', methods=['POST'])

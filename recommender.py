@@ -23,7 +23,7 @@ class PaperRecommender:
         self.papers: list[dict] = []
         self.embeddings: np.ndarray | None = None
         self.ratings: dict[str, float] = {}  # dblp_key -> score (-1 for irrelevant, 1-5 for rated)
-        self.readlist: set[str] = set()  # dblp_keys of papers to read
+        self.readlist: dict[str, int] = {}  # dblp_key -> priority (0-5, 0=default)
         self.model: SentenceTransformer | None = None
 
     def load_papers(self, path: Path = PAPERS_FILE):
@@ -53,26 +53,46 @@ class PaperRecommender:
             json.dump(self.ratings, f, indent=2)
 
     def load_readlist(self, path: Path = READLIST_FILE):
-        """Load reading list."""
+        """Load reading list. Auto-migrates old list format to dict with ranks."""
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
-                self.readlist = set(json.load(f))
-            print(f"Loaded {len(self.readlist)} papers in readlist")
+                data = json.load(f)
+            if isinstance(data, list):
+                # Migrate old format: ["key1", "key2"] -> {"key1": 1, "key2": 2, ...}
+                self.readlist = {k: i + 1 for i, k in enumerate(data)}
+                self.save_readlist()
+                print(f"Migrated {len(self.readlist)} papers in readlist to ranked format")
+            else:
+                self.readlist = data
+                print(f"Loaded {len(self.readlist)} papers in readlist")
 
     def save_readlist(self, path: Path = READLIST_FILE):
         """Save reading list."""
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(list(self.readlist), f, indent=2)
+            json.dump(self.readlist, f, indent=2)
 
     def add_to_readlist(self, dblp_key: str):
-        """Add a paper to reading list."""
-        self.readlist.add(dblp_key)
+        """Add a paper to the bottom of the reading list."""
+        max_rank = max(self.readlist.values()) if self.readlist else 0
+        self.readlist[dblp_key] = max_rank + 1
         self.save_readlist()
 
     def remove_from_readlist(self, dblp_key: str):
         """Remove a paper from reading list."""
-        self.readlist.discard(dblp_key)
+        self.readlist.pop(dblp_key, None)
         self.save_readlist()
+
+    def move_readlist_up(self, dblp_key: str):
+        """Decrease a paper's rank value by 1 (moves it higher)."""
+        if dblp_key in self.readlist:
+            self.readlist[dblp_key] -= 1
+            self.save_readlist()
+
+    def move_readlist_down(self, dblp_key: str):
+        """Increase a paper's rank value by 1 (moves it lower)."""
+        if dblp_key in self.readlist:
+            self.readlist[dblp_key] += 1
+            self.save_readlist()
 
     def _get_model(self) -> SentenceTransformer:
         """Lazy load the embedding model."""
