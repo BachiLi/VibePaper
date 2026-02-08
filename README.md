@@ -84,7 +84,7 @@ VibePaper/
 ├── edit_abstracts.py           # Local web UI for manually editing missing abstracts
 ├── paper_io.py                 # Shared file I/O with locking
 ├── data/
-│   ├── all_papers_enriched.json       # Paper database (7120 papers, 100% with abstracts)
+│   ├── papers.json                    # Paper database (7120 papers, 100% with abstracts)
 │   ├── embeddings_with_abstracts.npy  # Paper embeddings (generated)
 │   ├── ratings.json                   # Your ratings (generated)
 │   └── readlist.json                  # Your reading list (generated)

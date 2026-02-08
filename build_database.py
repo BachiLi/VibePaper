@@ -5,12 +5,12 @@ Build the paper database from scratch.
 This script:
 1. Fetches TOG papers from DBLP
 2. Fetches SIGGRAPH/SIGGRAPH Asia conference track papers (2022+)
-3. Fetches older SIGGRAPH papers (1985-2001)
+3. Fetches older SIGGRAPH papers (1974-2001)
 4. Merges all sources (deduplicating by DOI and DBLP key)
 5. Enriches with abstracts from Semantic Scholar
 6. Fills missing abstracts from OpenAlex
 
-Output: data/all_papers_enriched.json
+Output: data/papers.json
 """
 
 import json
@@ -166,11 +166,11 @@ def is_old_technical_paper(info: dict) -> bool:
 
 
 def fetch_old_siggraph_papers() -> list[dict]:
-    """Fetch older SIGGRAPH papers (1985-2001)."""
-    print("\n=== Fetching older SIGGRAPH papers (1985-2001) ===")
+    """Fetch older SIGGRAPH papers (1974-2001)."""
+    print("\n=== Fetching older SIGGRAPH papers (1974-2001) ===")
     all_papers = []
 
-    for year in range(1985, 2002):
+    for year in range(1974, 2002):
         url = f"{DBLP_API}?q=streamid:conf/siggraph:+year:{year}:&format=json&h=500"
 
         try:
@@ -444,7 +444,7 @@ def main():
     papers = enrich_with_openalex(papers)
 
     # Save final result
-    output_file = DATA_DIR / "all_papers_enriched.json"
+    output_file = DATA_DIR / "papers.json"
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(papers, f, indent=2, ensure_ascii=False)
 

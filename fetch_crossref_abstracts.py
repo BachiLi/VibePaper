@@ -11,7 +11,7 @@ import urllib.error
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
-INPUT_FILE = DATA_DIR / "all_papers_enriched.json"
+INPUT_FILE = DATA_DIR / "papers.json"
 OUTPUT_FILE = INPUT_FILE
 
 CROSSREF_API = "https://api.crossref.org/works"

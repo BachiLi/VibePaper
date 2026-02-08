@@ -5,7 +5,7 @@ Build embeddings for the paper database.
 This script computes SPECTER2 embeddings for all papers using their
 titles and abstracts (when available).
 
-Input: data/all_papers_enriched.json
+Input: data/papers.json
 Output: data/embeddings_with_abstracts.npy
 """
 
@@ -15,7 +15,7 @@ from pathlib import Path
 from sentence_transformers import SentenceTransformer
 
 DATA_DIR = Path(__file__).parent / "data"
-PAPERS_FILE = DATA_DIR / "all_papers_enriched.json"
+PAPERS_FILE = DATA_DIR / "papers.json"
 EMBEDDINGS_FILE = DATA_DIR / "embeddings_with_abstracts.npy"
 
 MODEL_NAME = "allenai/specter2_base"

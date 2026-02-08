@@ -14,7 +14,7 @@ import requests
 from bs4 import BeautifulSoup
 
 DATA_DIR = Path(__file__).parent / "data"
-INPUT_FILE = DATA_DIR / "all_papers_enriched.json"
+INPUT_FILE = DATA_DIR / "papers.json"
 OUTPUT_FILE = INPUT_FILE
 
 SITEMAP_BASE = "https://history.siggraph.org/wp-sitemap-posts-learning-{}.xml"

@@ -8,7 +8,7 @@ from pathlib import Path
 from sentence_transformers import SentenceTransformer
 
 DATA_DIR = Path(__file__).parent / "data"
-PAPERS_FILE = DATA_DIR / "all_papers_enriched.json"
+PAPERS_FILE = DATA_DIR / "papers.json"
 EMBEDDINGS_FILE = DATA_DIR / "embeddings_with_abstracts.npy"
 RATINGS_FILE = DATA_DIR / "ratings.json"
 READLIST_FILE = DATA_DIR / "readlist.json"

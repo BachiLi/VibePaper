@@ -1,11 +1,11 @@
-"""Shared read/write helpers with file locking for all_papers_enriched.json."""
+"""Shared read/write helpers with file locking for papers.json."""
 
 import json
 import msvcrt
 import time
 from pathlib import Path
 
-DATA_FILE = Path(__file__).parent / "data" / "all_papers_enriched.json"
+DATA_FILE = Path(__file__).parent / "data" / "papers.json"
 
 MAX_RETRIES = 10
 RETRY_DELAY = 0.5  # seconds
