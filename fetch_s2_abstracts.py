@@ -10,8 +10,10 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
+from paper_io import load_papers, save_papers, DATA_FILE
+
 DATA_DIR = Path(__file__).parent / "data"
-INPUT_FILE = DATA_DIR / "all_papers_enriched.json"
+INPUT_FILE = DATA_FILE
 OUTPUT_FILE = INPUT_FILE
 
 S2_BASE_URL = "https://www.semanticscholar.org/paper"
@@ -81,9 +83,27 @@ def fetch_abstract_from_s2(page, s2_id: str, verbose: bool = False) -> str | Non
     return None
 
 
+BATCH_SIZE = 7  # Restart browser session every N requests to avoid bot detection
+
+
+def new_browser_page(pw):
+    """Create a fresh browser context and page."""
+    browser = pw.chromium.launch(
+        headless=True,
+        args=["--disable-blink-features=AutomationControlled"],
+    )
+    context = browser.new_context(
+        viewport={"width": 1920, "height": 1080},
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        locale="en-US",
+    )
+    page = context.new_page()
+    page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
+    return browser, page
+
+
 def main():
-    with open(INPUT_FILE, "r", encoding="utf-8") as f:
-        papers = json.load(f)
+    papers = load_papers()
 
     # Find papers with S2 ID but no abstract
     candidates = [(i, p) for i, p in enumerate(papers) if p.get("s2_id") and not p.get("abstract")]
@@ -91,22 +111,19 @@ def main():
 
     found = 0
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        context = browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            locale="en-US",
-        )
-        page = context.new_page()
-
-        # Remove webdriver flag
-        page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
+    with sync_playwright() as pw:
+        browser, page = new_browser_page(pw)
+        session_count = 0
 
         for idx, (paper_idx, paper) in enumerate(candidates):
+            # Rotate browser session every BATCH_SIZE requests
+            if session_count >= BATCH_SIZE:
+                browser.close()
+                print(f"  --- Rotating browser session (30s cooldown) ---", flush=True)
+                time.sleep(30)
+                browser, page = new_browser_page(pw)
+                session_count = 0
+
             s2_id = paper["s2_id"]
             title = paper.get("title", "Unknown")[:60]
             print(f"[{idx+1}/{len(candidates)}] {title}...", flush=True)
@@ -120,20 +137,19 @@ def main():
             else:
                 print(f"  -> No abstract found", flush=True)
 
-            if idx % 20 == 0 and idx > 0:
-                print(f"  === Checkpoint: {idx}/{len(candidates)} (found: {found}) ===", flush=True)
-                # Save checkpoint
-                with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-                    json.dump(papers, f, ensure_ascii=False)
+            session_count += 1
 
-            # Small delay to be respectful
-            time.sleep(1)
+            if idx % 5 == 0 and idx > 0:
+                print(f"  === Checkpoint: {idx}/{len(candidates)} (found: {found}) ===", flush=True)
+                save_papers(papers)
+
+            # Delay between requests
+            time.sleep(5)
 
         browser.close()
 
     # Final save
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(papers, f, indent=2, ensure_ascii=False)
+    save_papers(papers)
 
     print(f"\nFetched {found} abstracts from Semantic Scholar")
 
