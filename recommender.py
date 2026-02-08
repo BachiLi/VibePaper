@@ -113,60 +113,89 @@ class PaperRecommender:
         self.ratings[dblp_key] = score
         self.save_ratings()
 
-    def get_recommendations(self, top_k: int = 20) -> list[tuple[dict, float]]:
-        """
-        Get paper recommendations based on ratings.
-        Returns list of (paper, score) tuples.
-        """
-        if not self.ratings:
-            print("No ratings yet. Rate some papers first!")
-            return []
+    # Number of nearest rated papers to average for scoring
+    TOPK_NEIGHBORS = 5
 
-        if self.embeddings is None:
-            print("No embeddings. Run compute_embeddings() first.")
-            return []
+    def _compute_similarities(self):
+        """
+        Compute per-paper similarity scores using top-k average similarity.
+        For each candidate paper, find its top-k most similar positively rated
+        papers and average those similarities (weighted by rating).
+        Returns (similarities array, key_to_idx dict) or (None, None).
+        """
+        if not self.ratings or self.embeddings is None:
+            return None, None
 
-        # Build index mapping
         key_to_idx = {p["dblp_key"]: i for i, p in enumerate(self.papers)}
 
-        # Compute weighted average of liked paper embeddings
-        positive_embeddings = []
+        positive_indices = []
         positive_weights = []
-        negative_embeddings = []
+        negative_indices = []
 
         for key, score in self.ratings.items():
             if key not in key_to_idx:
                 continue
             idx = key_to_idx[key]
-            emb = self.embeddings[idx]
-
             if score > 0:
-                positive_embeddings.append(emb)
+                positive_indices.append(idx)
                 positive_weights.append(score)
-            else:  # irrelevant
-                negative_embeddings.append(emb)
+            else:
+                negative_indices.append(idx)
 
-        if not positive_embeddings:
-            print("No positive ratings. Rate some papers you like!")
+        if not positive_indices:
+            return None, None
+
+        # Normalize all embeddings
+        norms = np.linalg.norm(self.embeddings, axis=1, keepdims=True)
+        norms = np.maximum(norms, 1e-10)  # avoid division by zero
+        embeddings_norm = self.embeddings / norms
+
+        # Compute similarity of every paper to every positively rated paper
+        pos_embeddings = embeddings_norm[positive_indices]  # (n_pos, dim)
+        pos_weights = np.array(positive_weights)  # (n_pos,)
+        sim_matrix = embeddings_norm @ pos_embeddings.T  # (n_papers, n_pos)
+
+        # For each paper, take weighted average of top-k most similar rated papers
+        k = min(self.TOPK_NEIGHBORS, len(positive_indices))
+        if k == len(positive_indices):
+            # Use all rated papers, weighted average
+            weighted = sim_matrix * pos_weights[np.newaxis, :]
+            similarities = weighted.sum(axis=1) / pos_weights.sum()
+        else:
+            # For each paper, find the top-k most similar rated papers
+            top_k_indices = np.argpartition(sim_matrix, -k, axis=1)[:, -k:]
+            similarities = np.zeros(len(self.papers))
+            for i in range(len(self.papers)):
+                top_idx = top_k_indices[i]
+                top_sims = sim_matrix[i, top_idx]
+                top_w = pos_weights[top_idx]
+                similarities[i] = np.average(top_sims, weights=top_w)
+
+        # Penalize papers similar to negatively rated ones using top-k negatives
+        if negative_indices:
+            neg_embeddings = embeddings_norm[negative_indices]
+            neg_sims = embeddings_norm @ neg_embeddings.T  # (n_papers, n_neg)
+            k_neg = min(self.TOPK_NEIGHBORS, len(negative_indices))
+            if k_neg == len(negative_indices):
+                neg_penalty = neg_sims.mean(axis=1)
+            else:
+                top_neg_indices = np.argpartition(neg_sims, -k_neg, axis=1)[:, -k_neg:]
+                neg_penalty = np.array([
+                    neg_sims[i, top_neg_indices[i]].mean()
+                    for i in range(len(self.papers))
+                ])
+            similarities = similarities - 0.5 * neg_penalty
+
+        return similarities, key_to_idx
+
+    def get_recommendations(self, top_k: int = 20) -> list[tuple[dict, float]]:
+        """
+        Get paper recommendations based on ratings.
+        Returns list of (paper, score) tuples.
+        """
+        similarities, key_to_idx = self._compute_similarities()
+        if similarities is None:
             return []
-
-        # Weighted average of positive embeddings
-        positive_weights = np.array(positive_weights)
-        positive_weights = positive_weights / positive_weights.sum()
-        query_embedding = np.average(positive_embeddings, axis=0, weights=positive_weights)
-
-        # Compute similarities
-        query_norm = query_embedding / np.linalg.norm(query_embedding)
-        embeddings_norm = self.embeddings / np.linalg.norm(self.embeddings, axis=1, keepdims=True)
-        similarities = embeddings_norm @ query_norm
-
-        # Subtract similarity to negative examples
-        if negative_embeddings:
-            neg_centroid = np.mean(negative_embeddings, axis=0)
-            neg_norm = neg_centroid / np.linalg.norm(neg_centroid)
-            neg_similarities = embeddings_norm @ neg_norm
-            # Reduce score for papers similar to irrelevant ones
-            similarities = similarities - 0.3 * neg_similarities
 
         # Rank and filter out already-rated papers and papers in readlist
         rated_indices = {key_to_idx[k] for k in self.ratings if k in key_to_idx}
@@ -189,46 +218,10 @@ class PaperRecommender:
         Compute relevance scores for specific papers.
         Returns dict mapping dblp_key -> relevance score.
         """
-        if not self.ratings or self.embeddings is None:
+        similarities, key_to_idx = self._compute_similarities()
+        if similarities is None:
             return {}
 
-        key_to_idx = {p["dblp_key"]: i for i, p in enumerate(self.papers)}
-
-        # Compute query embedding from positive ratings
-        positive_embeddings = []
-        positive_weights = []
-        negative_embeddings = []
-
-        for key, score in self.ratings.items():
-            if key not in key_to_idx:
-                continue
-            idx = key_to_idx[key]
-            emb = self.embeddings[idx]
-
-            if score > 0:
-                positive_embeddings.append(emb)
-                positive_weights.append(score)
-            else:
-                negative_embeddings.append(emb)
-
-        if not positive_embeddings:
-            return {}
-
-        positive_weights = np.array(positive_weights)
-        positive_weights = positive_weights / positive_weights.sum()
-        query_embedding = np.average(positive_embeddings, axis=0, weights=positive_weights)
-
-        query_norm = query_embedding / np.linalg.norm(query_embedding)
-        embeddings_norm = self.embeddings / np.linalg.norm(self.embeddings, axis=1, keepdims=True)
-        similarities = embeddings_norm @ query_norm
-
-        if negative_embeddings:
-            neg_centroid = np.mean(negative_embeddings, axis=0)
-            neg_norm = neg_centroid / np.linalg.norm(neg_centroid)
-            neg_similarities = embeddings_norm @ neg_norm
-            similarities = similarities - 0.3 * neg_similarities
-
-        # Get scores for requested keys
         scores = {}
         for key in keys:
             if key in key_to_idx:
