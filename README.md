@@ -68,23 +68,27 @@ uv run python build.py embeddings # Compute embeddings (~7 minutes)
 
 4. **Data sources**:
    - Paper metadata: [DBLP](https://dblp.org/)
-   - Abstracts: [Semantic Scholar](https://www.semanticscholar.org/) and [OpenAlex](https://openalex.org/)
+   - Abstracts: [Crossref](https://www.crossref.org/), [Semantic Scholar](https://www.semanticscholar.org/), [OpenAlex](https://openalex.org/), and [SIGGRAPH History Archive](https://history.siggraph.org/)
 
 ## File Structure
 
 ```
 VibePaper/
-├── app.py              # Flask web interface
-├── recommender.py      # Recommendation engine
-├── build.py            # Main build script
-├── build_database.py   # Fetches papers and abstracts
-├── build_embeddings.py # Computes SPECTER2 embeddings
+├── app.py                      # Flask web interface
+├── recommender.py              # Recommendation engine
+├── build.py                    # Main build script
+├── build_database.py           # Fetches papers and abstracts
+├── build_embeddings.py         # Computes SPECTER2 embeddings
+├── fetch_crossref_abstracts.py # Fetch abstracts from Crossref API
+├── fetch_s2_abstracts.py       # Fetch abstracts from Semantic Scholar (Playwright)
+├── edit_abstracts.py           # Local web UI for manually editing missing abstracts
+├── paper_io.py                 # Shared file I/O with locking
 ├── data/
-│   ├── all_papers_enriched.json  # Paper database
+│   ├── all_papers_enriched.json       # Paper database (7120 papers, 100% with abstracts)
 │   ├── embeddings_with_abstracts.npy  # Paper embeddings (generated)
-│   ├── ratings.json              # Your ratings (generated)
-│   └── readlist.json             # Your reading list (generated)
-└── pyproject.toml      # Dependencies
+│   ├── ratings.json                   # Your ratings (generated)
+│   └── readlist.json                  # Your reading list (generated)
+└── pyproject.toml              # Dependencies
 ```
 
 ## License
