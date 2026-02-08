@@ -12,4 +12,5 @@ dependencies = [
     "requests>=2.32.5",
     "torch>=2.6.0",
     "sentence-transformers>=5.2.2",
+    "playwright>=1.58.0",
 ]
